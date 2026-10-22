@@ -83,7 +83,15 @@
     position: absolute; overflow: hidden; box-shadow: 0 0 0 100cqw rgba(0,0,0,.55);
     outline: 1px solid rgba(255,255,255,.25); touch-action: none; cursor: crosshair;
   }
-  .layer { position: absolute; inset: 0; }
+  .layer, .zones { position: absolute; inset: 0; }
+  .zones { pointer-events: none; }
+  /* A sketch of the TV's own things (sent by the TV): off limits outside the area, coverable inside it. */
+  .zone {
+    position: absolute; display: flex; align-items: center; justify-content: center; text-align: center;
+    border-radius: .8cqw; font-size: 1.9cqw; line-height: 1.2; padding: .4cqw;
+  }
+  .zone.off { background: rgba(255,95,95,.16); border: 1px dashed rgba(255,130,130,.7); color: #ffc0c0; }
+  .zone.in { border: 1px dashed rgba(255,255,255,.35); color: rgba(255,255,255,.55); }
   .hint { font-size: 12px; color: var(--dim); margin: -4px 2px 10px; }
   .mini {
     position: absolute; cursor: grab;
@@ -139,11 +147,13 @@
   <div class="colors" id="colors"></div>
 
   <h2>المكان في الشاشة</h2>
-  <p class="hint">اسحب الورقة لمكانها، أو اضغط أي مكان. واضغط على أي ورقة لتعدّلها.</p>
+  <p class="hint">اسحب الورقة لمكانها، أو اضغط أي مكان. واضغط على أي ورقة لتعدّلها. الأحمر ممنوع.</p>
   <div class="tv">
     <div class="area" id="area">
+      <div class="zones" id="zonesIn"></div>
       <div class="layer" id="layer"></div>
     </div>
+    <div class="zones" id="zonesOut"></div>
   </div>
 
   <h2>الحجم</h2>
@@ -182,6 +192,7 @@ const $ = id => document.getElementById(id);
 const form = { id: null, c: COLORS[0], s: 1, m: 0, x: null, y: null };
 let notes = [];
 let area = [0, 0, 1920, 1080];
+let zones = [];
 let waitingFor = null;
 let drag = null;
 
@@ -235,6 +246,7 @@ function follow() {
       const state = JSON.parse(m.message);
       notes = state.n || [];
       area = state.a || [0, 0, 1920, 1080];
+      zones = state.z || [];
       setStatus(true);
       if (waitingFor && waitingFor(notes)) {
         waitingFor = null;
@@ -260,6 +272,15 @@ function draw() {
   [...$('colors').children].forEach((b, i) => b.classList.toggle('on', COLORS[i] === form.c));
   const [l, t, r, b] = area;
   $('area').style.cssText = cq(`left:${l}px;top:${t}px;width:${r - l}px;height:${b - t}px`);
+  $('zonesIn').innerHTML = $('zonesOut').innerHTML = '';
+  zones.forEach(([x0, y0, x1, y1, label, inside]) => {
+    const z = document.createElement('div');
+    z.className = 'zone ' + (inside ? 'in' : 'off');
+    const dx = inside ? l : 0, dy = inside ? t : 0;
+    z.style.cssText = cq(`left:${x0 - dx}px;top:${y0 - dy}px;width:${x1 - x0}px;height:${y1 - y0}px`);
+    z.textContent = label;
+    $(inside ? 'zonesIn' : 'zonesOut').append(z);
+  });
   [...$('sizes').children].forEach((b, i) => b.classList.toggle('on', i === form.s));
   $('send').textContent = form.id ? 'حدّث الملاحظة' : 'أرسل للشاشة';
   $('cancel').hidden = !form.id;
