@@ -8,7 +8,8 @@
 <meta name="apple-mobile-web-app-title" content="تذكيرات">
 <meta name="theme-color" content="#15191e">
 <link rel="apple-touch-icon" href="icon.png">
-<link rel="icon" href="icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
 <style>
   :root {
     --bg: #15191e; --card: #1e242b; --line: #2c343d; --text: #eef0f2; --dim: #9aa4ae; --accent: #ffe36e;
@@ -268,7 +269,9 @@ const HEART_ROOM = 50;   // the tape or heart hangs over the top edge
 const cq = css => css.replace(/(-?\d+(\.\d+)?)px/g, (_, n) => `${n / 19.2}cqw`);
 
 // The link is either the family's (#fam-…: the chat, and notes on any of its screens) or one screen's (#tv-…).
-const linkHash = location.hash.slice(1).replace(/[^\w-]/g, '');
+// Opened from the phone's home screen the link may come without its #…: use the one saved last time.
+const linkHash = location.hash.slice(1).replace(/[^\w-]/g, '') || load('link');
+if (linkHash) save('link', linkHash);
 const group = linkHash.startsWith('fam-') ? linkHash : null;
 let channel = group ? load('screen') : linkHash;
 const $ = id => document.getElementById(id);
