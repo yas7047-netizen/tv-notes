@@ -136,7 +136,8 @@
     color: var(--text); font: inherit; font-size: 15px; cursor: pointer; }
   #tabs button.on { background: var(--accent); color: #2a2622; border-color: var(--accent); font-weight: 700; }
   #who { font-size: 13px; color: var(--dim); background: none; border: 0; cursor: pointer; padding: 0; font: inherit; }
-  #screens { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  #screens { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+  #screens button { padding: 12px 6px; font-size: 16px; border-radius: 14px; }
   #screens button.on { background: var(--accent); color: #2a2622; border-color: var(--accent); font-weight: 700; }
 
   /* Chat */
@@ -211,6 +212,7 @@
   </section>
 
   <section id="pinView">
+  <h2 id="whichScreen" hidden>على أي شاشة؟</h2>
   <div id="screens"></div>
   <div id="note" class="paper">
     <textarea id="text" rows="4" maxlength="240" placeholder="اكتب الملاحظة هنا…" dir="auto"></textarea>
@@ -388,7 +390,8 @@ function draw() {
     $(inside ? 'zonesIn' : 'zonesOut').append(z);
   });
   [...$('sizes').children].forEach((b, i) => b.classList.toggle('on', i === form.s));
-  $('send').textContent = form.id ? 'حدّث الملاحظة' : 'أرسل للشاشة';
+  const target = group && Object.keys(screens).find(n => screens[n] === channel);
+  $('send').textContent = form.id ? 'حدّث الملاحظة' : target ? 'أرسل لـ' + target : 'أرسل للشاشة';
   $('cancel').hidden = !form.id;
 
   // Mini TV: the notes on the screen, with the one being written or edited where it will go.
@@ -658,7 +661,8 @@ function keep(m) {
 }
 
 function drawScreens() {
-  const names = Object.keys(screens);
+  $('whichScreen').hidden = false;
+  const names = Object.keys(screens).sort((a, b) => a.includes('الكبيرة') ? -1 : b.includes('الكبيرة') ? 1 : 0);
   const box = $('screens');
   box.innerHTML = '';
   if (!names.length) {
@@ -674,7 +678,7 @@ function drawScreens() {
     const b = document.createElement('button');
     b.className = 'ghost' + (screens[n] === channel ? ' on' : '');
     b.textContent = '📺 ' + n;
-    b.onclick = () => { channel = screens[n]; save('screen', channel); reset(); follow(); drawScreens(); };
+    b.onclick = () => { channel = screens[n]; save('screen', channel); reset(); follow(); drawScreens(); draw(); };
     box.append(b);
   });
 }
