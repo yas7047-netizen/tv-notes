@@ -105,6 +105,7 @@
 
   .sizes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
   #magnets { grid-template-columns: repeat(3, 1fr); }
+  #where { grid-template-columns: 1fr 1fr; }
   .sizes button, .ghost {
     background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
     padding: 11px 4px; font: inherit; font-size: 15px; cursor: pointer;
@@ -154,6 +155,14 @@
   .bub .body a { color: #8cc8ff; }
   .bub .meta { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 3px;
     font-size: 11px; color: var(--dim); }
+  .bub { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; transition: transform .15s; }
+  .bub.held { transform: scale(.97); }
+  /* Held on a message: delete it for everyone, or pin it on a screen. */
+  #sheet { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: flex-end; z-index: 15; }
+  #sheet div { width: 100%; max-width: 560px; margin: 0 auto; background: #1e242b; border-radius: 18px 18px 0 0;
+    padding: 14px 14px max(14px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; }
+  #sheet button { padding: 15px; border-radius: 12px; border: 0; background: #2a323b; color: var(--text); font: inherit; font-size: 17px; }
+  #sheet #sdel { color: #ff8a80; }
   .bub .pin { border: 0; background: none; color: var(--dim); font-size: 13px; cursor: pointer; padding: 0; }
   .bub img, .bub video { display: block; max-width: 100%; max-height: 320px; border-radius: 10px; margin: 4px 0; }
   .bub .note { font-size: 12px; color: var(--dim); }
@@ -194,7 +203,7 @@
   </header>
   <div id="tabs" hidden>
     <button data-tab="chat">💬 المحادثة</button>
-    <button data-tab="pin">📌 على الشاشة</button>
+    <button data-tab="pin">📝 نوتس</button>
   </div>
 
   <section id="chatView" hidden>
@@ -214,12 +223,16 @@
   <section id="pinView">
   <h2 id="whichScreen" hidden>على أي شاشة؟</h2>
   <div id="screens"></div>
+  <h2>وين تظهر؟</h2>
+  <div class="sizes" id="where"></div>
+  <div style="height:14px"></div>
   <div id="note" class="paper">
     <textarea id="text" rows="4" maxlength="240" placeholder="اكتب الملاحظة هنا…" dir="auto"></textarea>
     <span id="count"></span>
   </div>
   <div class="colors" id="colors"></div>
 
+  <div id="placeBox">
   <h2>المكان في الشاشة</h2>
   <p class="hint">اسحب الورقة لمكانها، أو اضغط أي مكان. واضغط على أي ورقة لتعدّلها. الأحمر ممنوع.</p>
   <div class="tv">
@@ -232,6 +245,7 @@
 
   <h2>الحجم</h2>
   <div class="sizes" id="sizes"></div>
+  </div>
 
   <h2>التثبيت</h2>
   <div class="sizes" id="magnets"></div>
@@ -241,7 +255,7 @@
   <div id="msg"></div>
 
   <div class="row">
-    <h2>على الشاشة الآن</h2>
+    <h2>النوتس</h2>
     <button class="ghost" id="clear" hidden>امسح الكل</button>
   </div>
   <div id="list"></div>
@@ -249,6 +263,11 @@
   <p style="text-align:center;margin-top:28px"><button id="who" hidden></button></p>
 </main>
 <div id="viewer"></div>
+<div id="sheet"><div>
+  <button id="spin">📌 علّقها على الشاشة</button>
+  <button id="sdel">🗑 حذف للجميع</button>
+  <button id="sno">إلغاء</button>
+</div></div>
 <div id="ask"><form>
   <h3>هلا 👋</h3>
   <p>وش اسمك؟ يطلع مع رسائلك في المحادثة.</p>
@@ -261,6 +280,8 @@ const NTFY = 'https://ntfy.sh/';
 const COLORS = ['#FFE36E', '#FFB3C7', '#B8F0A8', '#A8D8FF', '#FFC48A', '#D6C4FF', '#FDFCF7'];
 const SIZE_NAMES = ['صغير', 'متوسط', 'كبير', 'كبير جداً'];
 const MAGNET_NAMES = ['شريط لاصق', 'قلب أحمر ❤️', 'قلب وردي 🩷'];
+// Where a note shows (h): on the home screen, or only in the TV app's notes list.
+const WHERE_NAMES = ['📱 داخل التطبيق فقط', '🏠 على الشاشة الرئيسية'];
 // Same as the TV (Overlay.java): width, height, largest text, at 1920 pixels wide.
 const SIZES = [[320, 250, 46], [470, 350, 62], [700, 500, 86], [1180, 740, 130]];
 // Notes sit at x, y: their top left corner inside the area, at 1920×1080. Older notes have a place (p) instead,
@@ -277,7 +298,7 @@ if (linkHash) save('link', linkHash);
 const group = linkHash.startsWith('fam-') ? linkHash : null;
 let channel = group ? load('screen') : linkHash;
 const $ = id => document.getElementById(id);
-const form = { id: null, c: COLORS[0], s: 1, m: 0, x: null, y: null };
+const form = { id: null, c: COLORS[0], s: 1, m: 0, h: 1, x: null, y: null };
 let notes = [];
 let area = [0, 0, 1920, 1080];
 let zones = [];
@@ -316,6 +337,13 @@ function start() {
     b.textContent = name;
     b.onclick = () => { form.m = m; draw(); };
     $('magnets').append(b);
+  });
+  [1, 0].forEach(h => {
+    const b = document.createElement('button');
+    b.textContent = WHERE_NAMES[h];
+    b.dataset.h = h;
+    b.onclick = () => { form.h = h; draw(); };
+    $('where').append(b);
   });
   $('text').oninput = $('text').onfocus = $('text').onblur = draw;
   $('send').onclick = send;
@@ -375,6 +403,8 @@ function draw() {
   $('note').style.backgroundColor = form.c;
   $('note').className = 'paper m' + form.m + ' s' + form.s;
   [...$('magnets').children].forEach((b, i) => b.classList.toggle('on', i === form.m));
+  [...$('where').children].forEach(b => b.classList.toggle('on', +b.dataset.h === form.h));
+  $('placeBox').hidden = form.h === 0;
   const len = $('text').value.length;
   $('count').textContent = len > 180 ? `${len} / 240` : '';
   [...$('colors').children].forEach((b, i) => b.classList.toggle('on', COLORS[i] === form.c));
@@ -397,8 +427,8 @@ function draw() {
   // Mini TV: the notes on the screen, with the one being written or edited where it will go.
   const layer = $('layer');
   layer.innerHTML = '';
-  const shown = notes.filter(n => n.id !== form.id);
-  if (form.x != null) shown.push({ id: '_new', t: $('text').value.trim() || '…', c: form.c, s: form.s, m: form.m, x: form.x, y: form.y });
+  const shown = notes.filter(n => n.id !== form.id && n.h !== 0);
+  if (form.x != null && form.h !== 0) shown.push({ id: '_new', t: $('text').value.trim() || '…', c: form.c, s: form.s, m: form.m, x: form.x, y: form.y });
   shown.forEach(n => {
     const { x, y } = pos(n);
     const [w, h, f] = dims(n.s);
@@ -425,7 +455,7 @@ function draw() {
     el.style.backgroundColor = n.c;
     el.textContent = n.t;
     const small = document.createElement('small');
-    small.textContent = SIZE_NAMES[n.s];
+    small.textContent = n.h === 0 ? '📱 داخل التطبيق' : '🏠 ' + SIZE_NAMES[n.s];
     el.append(small);
     const x = document.createElement('button');
     x.className = 'x';
@@ -442,7 +472,7 @@ function draw() {
 }
 
 function edit(n, stay) {
-  Object.assign(form, { id: n.id, c: n.c, s: n.s, m: n.m || 0 }, pos(n));
+  Object.assign(form, { id: n.id, c: n.c, s: n.s, m: n.m || 0, h: n.h === 0 ? 0 : 1 }, pos(n));
   $('text').value = n.t;
   say('تعدّل ملاحظة موجودة: غيّر اللي تبي واضغط «حدّث الملاحظة»');
   draw();
@@ -512,7 +542,7 @@ function send() {
   const id = form.id || Math.random().toString(36).slice(2, 10);
   if (form.x == null) place();
   const { x, y } = pos(form);
-  publish({ op: 'add', id, t, c: form.c, s: form.s, m: form.m, x, y }, null,
+  publish({ op: 'add', id, t, c: form.c, s: form.s, m: form.m, h: form.h, x, y, time: Date.now() }, null,
     ns => ns.some(m => m.id === id && m.t === t && m.x === x && m.y === y))
     .then(ok => { if (ok) reset(); });
 }
@@ -556,6 +586,7 @@ function hash(s) {
 const NAME_COLORS = ['#ffd166', '#ff8fab', '#8ce99a', '#74c0fc', '#ffa94d', '#b197fc'];
 const chatMsgs = new Map();
 const pending = new Set();
+const unsent = new Set();   // deleted for everyone: ntfy still replays them for 12 hours
 let me = load('name');
 let screens = {};
 let more = false;
@@ -583,7 +614,11 @@ function chat() {
       const cmd = JSON.parse(await body(m));
       if (cmd.op === 'msg') {
         if (!cmd.time) cmd.time = m.time * 1000;
-        keep(cmd);
+        if (!unsent.has(cmd.id)) keep(cmd);
+      } else if (cmd.op === 'unsend') {
+        unsent.add(cmd.id);
+        chatMsgs.delete(cmd.id);
+        drawChat();
       } else if (cmd.op === 'hello' && cmd.name) {
         screens[cmd.name] = cmd.ch;
         drawScreens();
@@ -600,7 +635,7 @@ function chat() {
       more = r.more;
       Object.assign(screens, r.screens || {});
       drawScreens();
-      (r.items || []).forEach(keep);
+      (r.items || []).filter(m => !unsent.has(m.id)).forEach(keep);
       drawChat();
     } catch (_) {}
   };
@@ -733,14 +768,8 @@ function drawChat() {
     when.textContent = new Date(m.time).toLocaleTimeString('ar-SA', { hour: 'numeric', minute: '2-digit' }) +
       (mine ? (m.failed ? ' · ما انرسلت ⚠️' : m.sent ? ' ✓' : ' …') : '');
     meta.append(when);
-    if (m.t) {
-      const pin = document.createElement('button');
-      pin.className = 'pin';
-      pin.textContent = '📌 علّقها على الشاشة';
-      pin.onclick = () => pinText(m.t);
-      meta.append(pin);
-    }
     el.append(meta);
+    holdable(el, m);
     box.append(el);
   });
   if (!chatMsgs.size) box.innerHTML = '<div class="empty">ابدأ المحادثة 👋</div>';
@@ -755,7 +784,22 @@ function media(m) {
     img.onclick = () => { $('viewer').innerHTML = ''; $('viewer').append(img.cloneNode()); $('viewer').style.display = 'flex'; };
     wrap.append(img);
   } else if (m.k === 'vid') {
-    if (m.local || m.u) {
+    if (m.parts && !m.local) {
+      // Pieces: joined on the phone when tapped.
+      if (m.th) { const img = document.createElement('img'); img.src = m.th; wrap.append(img); }
+      const b = document.createElement('button');
+      b.className = 'ghost';
+      b.textContent = '▶ شغّل الفيديو';
+      b.onclick = async () => {
+        b.textContent = 'يحمّل…';
+        try {
+          const blobs = await Promise.all(m.parts.map(u => fetch(u).then(r => r.blob())));
+          m.local = URL.createObjectURL(new Blob(blobs, { type: 'video/mp4' }));
+          drawChat();
+        } catch (_) { b.textContent = 'ما قدرت أحمّله'; }
+      };
+      wrap.append(b);
+    } else if (m.local || m.u) {
       const v = document.createElement('video');
       v.src = m.local || m.u;
       v.controls = true;
@@ -769,6 +813,41 @@ function media(m) {
     }
   }
   return wrap;
+}
+
+// Hold a message (half a second) for its options.
+function holdable(el, m) {
+  let timer = null, x = 0, y = 0;
+  const stop = () => { clearTimeout(timer); timer = null; el.classList.remove('held'); };
+  el.addEventListener('pointerdown', e => {
+    x = e.clientX; y = e.clientY;
+    el.classList.add('held');
+    timer = setTimeout(() => { stop(); sheet(m); }, 500);
+  });
+  el.addEventListener('pointermove', e => { if (timer && Math.hypot(e.clientX - x, e.clientY - y) > 10) stop(); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => el.addEventListener(t, () => { if (timer) stop(); }));
+  el.addEventListener('contextmenu', e => e.preventDefault());
+}
+
+function sheet(m) {
+  if (navigator.vibrate) navigator.vibrate(15);
+  $('sheet').style.display = 'flex';
+  $('spin').hidden = !m.t;
+  $('spin').onclick = () => { $('sheet').style.display = 'none'; pinText(m.t); };
+  $('sdel').onclick = () => { $('sheet').style.display = 'none'; unsend(m); };
+  $('sno').onclick = $('sheet').onclick = e => { if (e.target === $('sheet') || e.target === $('sno')) $('sheet').style.display = 'none'; };
+}
+
+// Deleted for everyone: the TVs drop it (and its file) and every open page removes it.
+async function unsend(m) {
+  unsent.add(m.id);
+  chatMsgs.delete(m.id);
+  drawChat();
+  try {
+    await fetch(NTFY + group, { method: 'POST', body: JSON.stringify({ op: 'unsend', id: m.id }) });
+  } catch (_) {
+    alert('ما انحذفت، تأكد من النت وحاول مرة ثانية');
+  }
 }
 
 function pinText(t) {
@@ -806,11 +885,12 @@ async function post(m) {
   }
 }
 
-// Photos are made smaller on the phone first; a video goes as it is, up to ntfy's 15 MB.
+// Photos are made smaller on the phone first. ntfy takes 2 MB a file, so a video goes in pieces ("parts") that the
+// TVs join again; up to 40 MB.
 async function sendFile(file) {
   const isVid = file.type.startsWith('video/');
-  if (isVid && file.size > 15e6) {
-    alert('الفيديو أكبر من 15 ميغا. صوّر مقطعاً أقصر، أو أرسل رابطه (يوتيوب مثلاً).');
+  if (isVid && file.size > 40e6) {
+    alert('الفيديو أكبر من 40 ميغا. صوّر مقطعاً أقصر، أو أرسل رابطه (يوتيوب مثلاً).');
     return;
   }
   const caption = $('ctext').value.trim();
@@ -831,7 +911,8 @@ async function sendFile(file) {
       ext = 'jpg';
       m.th = await scaled(img, 220, 0.6, 'url');
     }
-    m.u = await upload(blob, `${m.id}.${ext}`, p => { m.progress = p; drawChat(); });
+    const parts = await upload(blob, `${m.id}.${ext}`, p => { m.progress = p; drawChat(); });
+    if (parts.length === 1) m.u = parts[0]; else m.parts = parts;
     m.n = file.name;
     delete m.progress;
     drawChat();
@@ -843,7 +924,18 @@ async function sendFile(file) {
   }
 }
 
-function upload(blob, name, onProgress) {
+const PIECE = 1.9e6;
+
+async function upload(blob, name, onProgress) {
+  const urls = [];
+  for (let at = 0; at < blob.size; at += PIECE) {
+    const piece = blob.slice(at, at + PIECE);
+    urls.push(await uploadOne(piece, name, p => onProgress((at + p * piece.size) / blob.size)));
+  }
+  return urls;
+}
+
+function uploadOne(blob, name, onProgress) {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
     x.open('PUT', NTFY + group + '-f');
