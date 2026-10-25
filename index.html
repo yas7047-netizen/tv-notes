@@ -335,6 +335,14 @@ function follow() {
     try {
       const m = JSON.parse(e.data);
       const state = JSON.parse(await body(m));
+      // A screen's own link (#tv-…) opens the whole app: the chat of the family this screen is in.
+      if (!group && state.g && /^fam-[\w-]+$/.test(state.g)) {
+        save('screen', channel);
+        save('link', state.g);
+        location.replace(location.pathname + location.search + '#' + state.g);
+        location.reload();
+        return;
+      }
       notes = state.n || [];
       area = state.a || [0, 0, 1920, 1080];
       zones = state.z || [];
