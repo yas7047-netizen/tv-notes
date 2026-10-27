@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="تذكيرات">
 <meta name="theme-color" content="#15191e">
+<meta http-equiv="Cache-Control" content="no-cache">
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="icon" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -990,6 +991,17 @@ function dayName(ms) {
   if (d.toDateString() === new Date(now - 864e5).toDateString()) return 'أمس';
   return d.toLocaleDateString('ar-SA-u-ca-gregory', { weekday: 'long', day: 'numeric', month: 'long' });
 }
+
+// A phone (above all one that opens the page from its home screen) can keep an old copy for a long time: ask for
+// the page as it is now, and reload when it is a newer one. Change VERSION with every upload.
+const VERSION = '2026-10-27a';
+fetch(location.pathname + '?fresh=' + Date.now(), { cache: 'no-store' })
+  .then(r => r.text())
+  .then(t => {
+    const v = (t.match(/const VERSION = '([^']+)'/) || [])[1];
+    if (v && v !== VERSION) location.reload();
+  })
+  .catch(() => {});
 
 // Started last, once every variable above exists.
 if (!linkHash) {
